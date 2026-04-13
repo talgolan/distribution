@@ -6,20 +6,29 @@ INSTALL_DIR="$HOME/sf-architect-comments"
 GW_URL="https://eng-ai-model-gateway.sfproxy.devx-preprod.aws-esvc1-useast2.aws.sfdc.cl"
 GW_TEST_MODEL="gemini-3-flash-preview"
 CHECK_ONLY=0
+DOWNLOAD_ONLY=0
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 for arg in "$@"; do
   case $arg in
-    --check) CHECK_ONLY=1 ;;
+    --check)         CHECK_ONLY=1 ;;
+    --download-only) DOWNLOAD_ONLY=1 ;;
     --help|-h)
-      echo "Usage: bash install.sh [--check]"
+      echo "Usage: bash install.sh [--check [--download-only]]"
       echo ""
-      echo "  (no flags)   Install all missing dependencies and set up the application."
-      echo "  --check      Check whether dependencies are installed without changing anything."
+      echo "  (no flags)               Install all missing dependencies and set up the application."
+      echo "  --check                  Check whether dependencies are installed without changing anything."
+      echo "  --check --download-only  Run checks, then download app.zip to the current directory."
       exit 0
       ;;
   esac
 done
+
+if [ $DOWNLOAD_ONLY -eq 1 ] && [ $CHECK_ONLY -eq 0 ]; then
+  echo "ERROR: --download-only may only be used with --check."
+  echo "Usage: bash install.sh --check --download-only"
+  exit 1
+fi
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 print_status() {
@@ -134,13 +143,16 @@ echo ""
 
 # ── Dependency check ──────────────────────────────────────────────────────────
 BUN_OK=0; BREW_OK=0; CURL_OK=0; UNZIP_OK=0; SF_OK=0; ORG62_OK=0; APP_INSTALLED=0
-GW_REACHABLE=0; GW_KEY_OK=0; GW_KEY_CONFIGURED=0
+GW_REACHABLE=0; GW_KEY_OK=0; GW_KEY_CONFIGURED=0; ZIP_OK=0
 
 command -v bun   >/dev/null 2>&1 && BUN_OK=1
 command -v brew  >/dev/null 2>&1 && BREW_OK=1
 command -v curl  >/dev/null 2>&1 && CURL_OK=1
 command -v unzip >/dev/null 2>&1 && UNZIP_OK=1
 command -v sf    >/dev/null 2>&1 && SF_OK=1
+
+ZIP_HTTP=$(curl --max-time 10 --silent --output /dev/null --write-out "%{http_code}" "$ZIP_URL" 2>/dev/null)
+[ "$ZIP_HTTP" = "200" ] && ZIP_OK=1
 # App is considered installed if the server entry point is present
 [ -f "$INSTALL_DIR/src/web-server.js" ] && APP_INSTALLED=1
 
@@ -245,6 +257,7 @@ if [ $SF_OK -eq 1 ]; then
   fi
 fi
 print_status "Application"    "$APP_INSTALLED"   "$([ $APP_INSTALLED -eq 1 ] && echo "installed at $INSTALL_DIR" || echo "not yet installed")"
+print_status "Download URL"   "$ZIP_OK"          "$([ $ZIP_OK -eq 1 ] && echo "$ZIP_URL" || echo "not reachable (HTTP $ZIP_HTTP) — check VPN or try again later")"
 echo ""
 
 if [ $GW_REACHABLE -eq 0 ]; then
@@ -265,7 +278,7 @@ echo ""
 
 # ── Check-only mode: exit here ────────────────────────────────────────────────
 if [ $CHECK_ONLY -eq 1 ]; then
-  ALL_OK=$(( BUN_OK && BREW_OK && CURL_OK && UNZIP_OK && SF_OK && ORG62_OK && APP_INSTALLED ))
+  ALL_OK=$(( BUN_OK && BREW_OK && CURL_OK && UNZIP_OK && SF_OK && ORG62_OK && APP_INSTALLED && ZIP_OK ))
   if [ $ALL_OK -eq 1 ] && [ $GW_KEY_OK -eq 1 ]; then
     echo "Everything is installed and configured. Run 'sfac' to launch the app."
   elif [ $ALL_OK -eq 1 ]; then
@@ -275,6 +288,20 @@ if [ $CHECK_ONLY -eq 1 ]; then
     echo "Some items need attention. Run 'bash install.sh' to resolve them."
   fi
   echo ""
+
+  if [ $DOWNLOAD_ONLY -eq 1 ]; then
+    if [ $ZIP_OK -eq 0 ]; then
+      echo "Cannot download: app.zip is not reachable (HTTP $ZIP_HTTP)."
+      echo ""
+      exit 1
+    fi
+    DEST="$(pwd)/app.zip"
+    echo "Downloading app.zip to $DEST ..."
+    curl -fsSL "$ZIP_URL" -o "$DEST"
+    echo "Done."
+    echo ""
+  fi
+
   exit 0
 fi
 
