@@ -41,7 +41,18 @@ download_app() {
   local zip_path="$tmp_dir/app.zip"
   local extracted_name="sf_architect_comments"
 
-  echo "  Downloading from GitHub..."
+  echo "  Checking download URL..."
+  local http_status
+  http_status=$(curl --max-time 10 --silent --output /dev/null --write-out "%{http_code}" "$ZIP_URL")
+  if [ "$http_status" != "200" ]; then
+    echo "ERROR: Cannot reach the download URL (HTTP $http_status)."
+    echo "       $ZIP_URL"
+    echo "       Check your internet connection or try again in a few minutes."
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+
+  echo "  Downloading..."
   curl -fsSL "$ZIP_URL" -o "$zip_path"
 
   echo "  Extracting..."
