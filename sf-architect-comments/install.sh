@@ -155,6 +155,8 @@ ZIP_HTTP=$(curl --max-time 10 --silent --output /dev/null --write-out "%{http_co
 [ "$ZIP_HTTP" = "200" ] && ZIP_OK=1
 # App is considered installed if the server entry point is present
 [ -f "$INSTALL_DIR/src/web-server.js" ] && APP_INSTALLED=1
+APP_VERSION="unknown"
+[ -f "$INSTALL_DIR/VERSION" ] && APP_VERSION=$(cat "$INSTALL_DIR/VERSION")
 
 # Check if org62 is authenticated
 if [ $SF_OK -eq 1 ]; then
@@ -257,6 +259,9 @@ if [ $SF_OK -eq 1 ]; then
   fi
 fi
 print_status "Application"    "$APP_INSTALLED"   "$([ $APP_INSTALLED -eq 1 ] && echo "installed at $INSTALL_DIR" || echo "not yet installed")"
+if [ $APP_INSTALLED -eq 1 ]; then
+  print_status "Version"      1                  "$APP_VERSION"
+fi
 print_status "Download URL"   "$ZIP_OK"          "$([ $ZIP_OK -eq 1 ] && echo "$ZIP_URL" || echo "not reachable (HTTP $ZIP_HTTP) — check VPN or try again later")"
 echo ""
 
@@ -405,7 +410,8 @@ echo "Downloading Architect Comments..."
 download_app
 cd "$INSTALL_DIR"
 bun install --silent
-echo "✓ Application ready"
+APP_VERSION=$(cat "$INSTALL_DIR/VERSION" 2>/dev/null || echo "unknown")
+echo "✓ Application ready (version $APP_VERSION)"
 echo ""
 
 # ── 6. Create .env ────────────────────────────────────────────────────────────
